@@ -38,6 +38,7 @@ class Wannier90BandsWorkChain(WorkChain):
         spec.input('protocol', valid_type=orm.Dict, default=lambda: orm.Dict(dict={'name': 'theos-ht-1.0'}), help='The protocol to use for the workchain.', validator=validate_protocol)
         spec.input('options', valid_type=orm.Dict, required=False, help='Optional `options` to use for the workchain.')
         spec.input('settings', valid_type=orm.Dict, required=False, help='Optional `settings` to use for the workchain.')
+        spec.input('extra_params', valid_type=orm.Dict, required=False, help='Optional `settings` to use for the workchain.')
 
         # control variables for the workchain
         spec.input('auto_projections', valid_type=orm.Bool, default=lambda: orm.Bool(True),
@@ -203,6 +204,8 @@ class Wannier90BandsWorkChain(WorkChain):
         else:
             self.ctx.settings = {}
 
+        self.ctx.extra_params = self.inputs.extra_params.get_dict() if 'extra_params' in self.inputs else {}
+
         # save variables to ctx because they maybe used in several difference methods
         args = {'structure': self.ctx.current_structure, 'pseudos': self.ctx.pseudos}
         # number_of_electrons & number_of_projections will be used in setting wannier parameters,
@@ -288,7 +291,7 @@ class Wannier90BandsWorkChain(WorkChain):
 
         nscf_parameters['CONTROL']['restart_mode'] = 'restart'
         nscf_parameters['CONTROL']['calculation'] = 'nscf'
-        nscf_parameters['ELECTRONS']['diagonalization'] = 'cg'
+        nscf_parameters['ELECTRONS']['diagonalization'] = self.ctx.extra_params.get('diag', 'cg')
         nscf_parameters['ELECTRONS']['diago_full_acc'] = True
 
         nscf_parameters = orm.Dict(dict=nscf_parameters)
@@ -328,13 +331,17 @@ class Wannier90BandsWorkChain(WorkChain):
             # 'kmesh_tol': 1e-8
         }
 
-        parameters['num_bands'] = self.ctx.nscf_parameters['SYSTEM']['nbnd']
+        excl = 0
+        if 'exclude_bands' in self.ctx.extra_params:
+            parameters['exclude_bands'] = self.ctx.extra_params['exclude_bands']
+            excl = len(parameters['exclude_bands'])
+        parameters['num_bands'] = self.ctx.nscf_parameters['SYSTEM']['nbnd'] - excl
         # TODO check nospin, spin, soc
         if self.inputs.only_valence:
             num_wann = parameters['num_bands']
         else:
             num_wann = self.ctx.number_of_projections
-        parameters['num_wann'] = num_wann
+        parameters['num_wann'] = num_wann - excl
         self.report(f'number of Wannier functions set as {num_wann}')
 
         if self.inputs.auto_projections:
@@ -357,7 +364,7 @@ class Wannier90BandsWorkChain(WorkChain):
         number_of_atoms = len(self.ctx.current_structure.sites)
         if self.inputs.maximal_localisation:
             parameters.update({
-                'num_iter': 400,
+                'num_iter': self.ctx.extra_params.get('wan_num_iter', 400),
                 'conv_tol': 1e-7 * number_of_atoms,
                 'conv_window': 3,
             })
@@ -369,7 +376,7 @@ class Wannier90BandsWorkChain(WorkChain):
         else:
             if self.inputs.disentanglement:
                 parameters.update({
-                    'dis_num_iter': 200,
+                    'dis_num_iter': self.ctx.extra_params.get('wan_dis_num_iter', 200),
                     'dis_conv_tol': parameters['conv_tol'],
                     # 'dis_froz_max': 1.0,  #TODO a better value??
                     #'dis_mix_ratio':1.d0,
