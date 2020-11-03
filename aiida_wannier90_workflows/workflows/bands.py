@@ -221,7 +221,8 @@ class Wannier90BandsWorkChain(WorkChain):
         # 1. setting nscf number of bands, or
         # 2. setting nscf number of bands when opengrid is used & opengrid has nscf step
         # 3. setting scf number of bands when opengrid is used & opengrid only has scf step
-        self.ctx.nscf_nbnd = get_wannier_number_of_bands(**args)
+        factor = self.ctx.extra_params.get('bands_factor', 1)
+        self.ctx.nscf_nbnd = int(get_wannier_number_of_bands(**args) * factor)
 
         self.setup_scf_parameters()
         self.setup_nscf_parameters()
