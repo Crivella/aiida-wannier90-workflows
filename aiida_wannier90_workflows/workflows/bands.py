@@ -40,6 +40,9 @@ class Wannier90BandsWorkChain(WorkChain):
         spec.input('settings', valid_type=orm.Dict, required=False, help='Optional `settings` to use for the workchain.')
         spec.input('extra_params', valid_type=orm.Dict, required=False, help='Optional `settings` to use for the workchain.')
 
+        spec.input('explicit_kpoints', valid_type=orm.KpointsData, required=False, help='Optional manual kpoint path for QE.')
+        spec.input('kpoints_path', valid_type=orm.Dict, required=False, help='Optional manual kpoint path for W90.')
+
         # control variables for the workchain
         spec.input('auto_projections', valid_type=orm.Bool, default=lambda: orm.Bool(True),
             help='If True use SCDM projections, otherwise use random projections.')
@@ -67,8 +70,10 @@ class Wannier90BandsWorkChain(WorkChain):
             help='Kpoint mesh density of the resulting band structure.')
 
         spec.output('primitive_structure', valid_type=orm.StructureData,
+            required=False,
             help='The normalized and primitivized structure for which the calculations are computed.')
         spec.output('seekpath_parameters', valid_type=orm.Dict,
+            required=False,
             help='The parameters used in the SeeKpath call to normalize the input or relaxed structure.')
         spec.output('scf_parameters', valid_type=orm.Dict, help='The output parameters of the scf `PwBaseWorkChain`.')
         spec.output('nscf_parameters', valid_type=orm.Dict, required=False,
@@ -92,7 +97,11 @@ class Wannier90BandsWorkChain(WorkChain):
 
         spec.outline(
             cls.setup,
-            cls.run_seekpath,
+            if_(cls.should_run_seekpath)(
+                cls.run_seekpath,
+                ).else_(
+                cls.set_kpoints_from_input
+            ),
             cls.setup_parameters,
             cls.run_wannier_workchain,
             cls.inspect_wannier_workchain,
@@ -162,6 +171,12 @@ class Wannier90BandsWorkChain(WorkChain):
                 return self.exit_codes.ERROR_INVALID_INPUT_OPENGRID
             self.report('open_grid.x will be used to unfold kmesh')
 
+    def should_run_seekpath(self):
+        """Should run seekpath or set from inputs?"""
+        if 'explicit_kpoints' in self.inputs and 'kpoints_path' in self.inputs:
+            return False
+        return True
+
     def run_seekpath(self):
         """Run the structure through SeeKpath to get the primitive and normalized structure."""
         structure_formula = self.inputs.structure.get_formula()
@@ -184,6 +199,12 @@ class Wannier90BandsWorkChain(WorkChain):
 
         self.out('primitive_structure', result['primitive_structure'])
         self.out('seekpath_parameters', result['parameters'])
+
+    def set_kpoints_from_input(self):
+        """Set kpoints from input nodes."""
+        self.ctx.current_structure = self.inputs.structure
+        self.ctx.explicit_kpoints = self.inputs.explicit_kpoints
+        self.ctx.kpoints_path = self.inputs.kpoints_path.get_dict()
 
     def setup_parameters(self):
         """setup input parameters of each calculations, 
