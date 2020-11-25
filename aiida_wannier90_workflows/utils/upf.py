@@ -407,7 +407,7 @@ def get_projections(structure: orm.StructureData, pseudos: Dict_of_Upf):
         projections.extend(projs)
     return projections
 
-def parse_number_of_pswfc(upf_content: str) -> int:
+def parse_number_of_pswfc(upf_content: str, spin_polarized=False) -> int:
     """Get the number of orbitals in the UPF file.
     This is also the number of orbitals used for projections in projwfc.x.
     No AiiDA dependencies.
@@ -438,9 +438,12 @@ def parse_number_of_pswfc(upf_content: str) -> int:
             num_projections += 2 * l
             if abs(j - l - 0.5) < 1e-6:
                 num_projections += 2
+
+    if has_so and not spin_polarized:
+        num_projections //= 2
     return num_projections
 
-def get_number_of_projections_from_upf(upf: orm.UpfData) -> int:
+def get_number_of_projections_from_upf(upf: orm.UpfData, spin_polarized=False) -> int:
     """aiida wrapper for `parse_number_of_pswfc`.
 
     :param upf: the UPF file
@@ -449,9 +452,9 @@ def get_number_of_projections_from_upf(upf: orm.UpfData) -> int:
     :rtype: int
     """
     upf_content = get_upf_content(upf)
-    return parse_number_of_pswfc(upf_content)
+    return parse_number_of_pswfc(upf_content, spin_polarized=spin_polarized)
 
-def get_number_of_projections(structure: orm.StructureData, pseudos: Dict_of_Upf) -> int:
+def get_number_of_projections(structure: orm.StructureData, pseudos: Dict_of_Upf, spin_polarized=False) -> int:
     """get number of projections for the crystal structure 
     based on pseudopotential files.
 
@@ -478,7 +481,7 @@ def get_number_of_projections(structure: orm.StructureData, pseudos: Dict_of_Upf
     composition = structure.get_composition()
     for kind in composition:
         upf = pseudos[kind]
-        nprojs = get_number_of_projections_from_upf(upf)
+        nprojs = get_number_of_projections_from_upf(upf, spin_polarized=spin_polarized)
         tot_nprojs += nprojs * composition[kind]
     return tot_nprojs
 
@@ -497,7 +500,7 @@ def get_wannier_number_of_bands(structure, pseudos, only_valence=False, spin_pol
     :rtype: int
     """
     num_electrons = get_number_of_electrons(structure, pseudos)
-    num_projections = get_number_of_projections(structure, pseudos)
+    num_projections = get_number_of_projections(structure, pseudos, spin_polarized=spin_polarized)
     nspin = 2 if spin_polarized else 1
     # TODO check nospin, spin, soc
     if only_valence:

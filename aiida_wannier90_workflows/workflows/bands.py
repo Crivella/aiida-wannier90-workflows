@@ -226,6 +226,7 @@ class Wannier90BandsWorkChain(WorkChain):
             self.ctx.settings = {}
 
         self.ctx.extra_params = self.inputs.extra_params.get_dict() if 'extra_params' in self.inputs else {}
+        self.ctx.spin = self.inputs.spin_polarized.value or self.inputs.spin_orbit_coupling.value
 
         # save variables to ctx because they maybe used in several difference methods
         args = {'structure': self.ctx.current_structure, 'pseudos': self.ctx.pseudos}
@@ -233,10 +234,10 @@ class Wannier90BandsWorkChain(WorkChain):
         # and since they are calculated manually, they will be checked in the
         # `inspect_wannier_workchain` against QE outputs, to ensure they are correct.
         self.ctx.number_of_electrons = get_number_of_electrons(**args)
-        self.ctx.number_of_projections = get_number_of_projections(**args)
+        self.ctx.number_of_projections = get_number_of_projections(**args, spin_polarized=self.ctx.spin)
         args.update({
             'only_valence': self.inputs.only_valence.value,
-            'spin_polarized': self.inputs.spin_polarized.value
+            'spin_polarized': self.ctx.spin
             })
         # nscf_nbnd will be used in
         # 1. setting nscf number of bands, or
